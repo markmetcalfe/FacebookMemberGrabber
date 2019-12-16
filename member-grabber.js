@@ -1,71 +1,76 @@
 // ==UserScript==
 // @name         Facebook Group Member Grabber
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Gets a csv list of the members of a facebook group. Must be run on the members list page of a group. Unfortunatley has to be a client side script as Facebook have heavily restricted their graph API after the whole Cambridge Analytica scandal.
 // @author       Mark Metcalfe
 // @include      *.facebook.com/groups/*/members/
 // @grant        none
 // ==/UserScript==
 
+var totalGrabbed = 0;
+var counter = 0;
 function scroll(){
   let before_height = document.body.scrollHeight;
   window.scrollTo(0,before_height);
   setTimeout(function(){
-    if(document.body.scrollHeight > before_height)
-      scroll();
-    else
-      grab();
-  }, 100);
-}
-
-var totalGrabbed = 0;
-function grab(){
-  let children = document.querySelector('#groupsMemberSection_all_members .fbProfileBrowser .lists .fbProfileBrowserResult .fbProfileBrowserListContainer').children;
-  let errors = 0;
-  let grabbed = 0;
-  let users = {};
-  for (let i = 0; i < children.length; i++) {
-    let sublist = children[i].children;
-    if(sublist.length === 1) sublist = children[i].children[0].children;
-    for(let j = 0; j < sublist.length; j++){
-      let child = sublist[j].children[0];
-      if(child.tagName == 'DIV') child = child.children[0];
-      grabbed++;
+    if (counter == -1) return;
+    scroll();
+    let recent_members = document.getElementById("groupsMemberSection_recently_joined");
+    let have_more = recent_members.querySelector(".uiMorePager");
+    if(document.body.scrollHeight > before_height){
+      counter = 0;
+      let children = document.querySelectorAll('[data-name="GroupProfileGridItem"]');
+      let grabbed = children.length;
       if(grabbed>totalGrabbed){
         totalGrabbed = grabbed;
         document.getElementById('this_export_main_ui_grabbed_count').innerHTML = totalGrabbed;
       }
-      if(child.classList.contains('uiMorePagerPrimary')){
-        scroll();
-        return false;
-      } else {
-        try {
-          let profileId = /member_id=([0-9]+)/gi.exec(child.getAttribute('ajaxify'))[1];
-          let name = child.children[0].getAttribute('aria-label');
-          let url = child.href;
-          if(url.contains('/profile.php?')){
-            url = '';
-          } else {
-            url = /facebook.com\/(.[^?]+)/gi.exec(url)[1];
-          }
-          users[profileId] = [profileId,name,url];
-        } catch(err) {
-          errors += 1;
-        }
-      }
+    }
+    if (have_more == null) {
+      console.log("Grabbing");
+      counter = -1;
+      grab();
+    }
+  }, 500);
+}
+
+function grab(){
+  let children = document.querySelectorAll('[data-name="GroupProfileGridItem"]');
+  let errors = 0;
+  let users = {};
+  for (let i = 0; i < children.length; i++) {
+    let div = children[i];
+    let child = div.children[0];
+    try {
+      let profileId = /member_id=([0-9]+)/gi.exec(child.getAttribute('ajaxify'))[1];
+      let name = child.children[0].getAttribute('aria-label');
+      let joined = div.querySelector("abbr.timestamp");
+      if (joined == null)
+        joined = ""
+      else
+        joined = joined.children[0].innerHTML;
+      let url = child.href;
+      if(url.contains('/profile.php?'))
+        url = '';
+      else
+        url = /facebook.com\/(.[^?]+)/gi.exec(url)[1];
+      users[profileId] = [profileId,name,url,joined];
+    } catch(err) {
+      console.log(err);
+      errors += 1;
     }
   }
   finishedUI(users, errors);
 }
 
 function getCSV(users){
-  let data = 'id,name,username,\n';
+  let data = 'id,name,username,joined,\n';
   let user_list = [];
   for(let id in users) user_list.push(users[id]);
   for(let i=0; i<user_list.length; i++){
     let user = user_list[i];
-    data += user[0]+',"'+user[1]+'",'+user[2];
+    data += user[0]+',"'+user[1]+'",'+user[2]+','+user[3];
     if(i<user_list.length-1) data += ',\n';
   }
 
@@ -120,7 +125,6 @@ function btnClick(){
   document.getElementById("this_export_list_btn_1").style.cssText = 'display:none';
   showUI();
   scroll();
-  setTimeout(scroll, 1500);
 }
 
 function addBtn(){
