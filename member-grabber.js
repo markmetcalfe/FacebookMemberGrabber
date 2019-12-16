@@ -16,8 +16,10 @@ function scroll(){
   setTimeout(function(){
     if (counter == -1) return;
     scroll();
-    let recent_members = document.getElementById("groupsMemberSection_recently_joined");
-    let have_more = recent_members.querySelector(".uiMorePager");
+    let members = document.getElementById("groupsMemberSection_recently_joined");
+    if (members == null)
+      members = document.getElementById("groupsMemberSection_all_members");
+    let have_more = members.querySelector(".uiMorePager");
     if(document.body.scrollHeight > before_height){
       counter = 0;
       let children = document.querySelectorAll('[data-name="GroupProfileGridItem"]');
